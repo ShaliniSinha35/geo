@@ -29,12 +29,16 @@ function getCurrentDateTime() {
   return cdate_time;
 }
 
+console.log("33",getCurrentDateTime())
+
 
 const connection = mysql.createPool({
   host: "137.59.53.229",
   user: "pmksybihar_geolocation_user",
   password: "e?S=XJHZI@ij",
-  database:"pmksybihar_geolocation_db"
+  database:"pmksybihar_geolocation_db",
+  timezone: 'Asia/Kolkata'
+
 });
 
 
@@ -61,15 +65,8 @@ handleDisconnect();
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-   
-
-  
-   
     const uploadPath = path.join(__dirname,'..', 'upload', 'app');
     
-  
-  
-
     // Check if the subfolder exists; if not, create it
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
@@ -98,6 +95,7 @@ const upload = multer({
     }
   }
 });
+
 
 
 app.post('/geo/upload', upload.single('image'), (req, res) => {
@@ -331,6 +329,7 @@ app.post("/geo/addProject", async (req, res) => {
   } = req.body;
 
   const cdate_time = getCurrentDateTime();
+  console.log("331",cdate_time)
   console.log("226", req.body);
   console.log("imageArray", imageArray);
 
@@ -453,6 +452,7 @@ app.get("/geo/projectDetails", (req, res) => {
            pd.block,
            pd.panchayat,
            pd.village,
+           pd.workid,
            pd.project_area,
            pd.activity_type,
            pd.activity_name,
@@ -593,6 +593,7 @@ app.get("/geo/completeProjects",(req,res)=>{
       pd.emp_id, 
       pd.farmer_name,
       pd.entry_date,
+      pd.workid,
       mpa.name AS project_name,
       ma.name AS activity_names, 
       mv.name AS village_name, 
