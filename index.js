@@ -29,7 +29,7 @@ function getCurrentDateTime() {
   return cdate_time;
 }
 
-console.log("33",getCurrentDateTime())
+
 
 
 const connection = mysql.createPool({
@@ -256,71 +256,6 @@ app.get("/geo/verify", (req, res) => {
   });
 });
 
-// app.post("/geo/addProject", (req, res) => {
-//   const { emp_id, dist, block, panchayat, village,farmer_name, projectArea, activityType, activityName, imageArray,desc,workid,length,breadth,height } = req.body;
-
-// const cdate_time=getCurrentDateTime()
-//   console.log("226",req.body)
-// console.log("imageArray",imageArray)
-
-     
-
-
-//   const sqlInsertProject = `INSERT INTO project_detail 
-//                             (emp_id, dist, block, panchayat, village, farmer_name, project_area, activity_type, activity_name,workid,length,breadth,height,entry_date,status) 
-//                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?, ?,'Active')`;
-
-//   connection.query(sqlInsertProject, [emp_id, dist, block, panchayat, village, farmer_name, projectArea, activityType, activityName,workid,length,breadth,height,cdate_time], (err, result) => {
-//     if (err) {
-//       console.error('Error inserting project data:', err);
-//       res.status(500).send('Error inserting project data into database');
-//       return;
-//     }
-
-//     const projectId = result.insertId;
-
-
-//     const pid = `PR000${projectId}`;
-
-//     const sqlUpdateProject = `UPDATE project_detail 
-//                               SET pid = ? 
-//                               WHERE id = ?`;
-
-//     connection.query(sqlUpdateProject, [pid, projectId], (updateErr, updateResult) => {
-//       if (updateErr) {
-//         console.error('Error updating project pid:', updateErr);
-//         res.status(500).send('Error updating project data in database');
-//         return;
-//       }
-
-
-      
-//     const imageInsertPromises = imageArray.map(async (image) => {
-//       const { uri, latitude, longitude, dateTime } = image;
-
-
-//        const imgUri= `Img${workid}.jpg`
-
-//       const sqlInsertImage = `INSERT INTO image_detail 
-//                               (emp_id, pid, url, lat, longitude, description, date_time) 
-//                               VALUES (?, ?, ?, ?, ?, ?, ?)`;
-
-//         connection.query(sqlInsertImage, [emp_id, pid, imgUri, latitude, longitude, desc, cdate_time],(imageErr,imageResult)=>{
-//          if(imageErr){
-//           console.error('Error updating image pid:', imageErr);
-//           res.status(500).send('Error updating image data in database');
-//           return;
-//          }
-
-//       });
-//     });
-
-//       console.log('Project data inserted and pid updated successfully!');
-//       res.status(200).send(workid);
-//       // res.json({ message: "insertion successful", pid:pid });
-//     });
-//   });
-// });
 
 app.post("/geo/addProject", async (req, res) => {
   const {
@@ -328,19 +263,14 @@ app.post("/geo/addProject", async (req, res) => {
     activityType, activityName, imageArray, desc, workid, length, breadth, height
   } = req.body;
 
-  const cdate_time = getCurrentDateTime();
-  console.log("331",cdate_time)
   console.log("226", req.body);
   console.log("imageArray", imageArray);
 
-  const sqlInsertProject = `INSERT INTO project_detail 
-                            (emp_id, dist, block, panchayat, village, farmer_name, project_area, activity_type, activity_name, workid, length, breadth, height, entry_date, status) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'Active')`;
-
   try {
-    // Insert project details
-    const projectResult = await new Promise((resolve, reject) => {
-      connection.query(sqlInsertProject, [emp_id, dist, block, panchayat, village, farmer_name, projectArea, activityType, activityName, workid, length, breadth, height, cdate_time], (err, result) => {
+    // Check if pid exists for the given workid and emp_id
+    const existingProject = await new Promise((resolve, reject) => {
+      const sqlCheckProject = `SELECT pid FROM project_detail WHERE workid = ? AND emp_id = ?`;
+      connection.query(sqlCheckProject, [workid, emp_id], (err, result) => {
         if (err) {
           reject(err);
         } else {
@@ -349,29 +279,91 @@ app.post("/geo/addProject", async (req, res) => {
       });
     });
 
-    const projectId = projectResult.insertId;
-    const pid = `PR000${projectId}`;
+    let pid;
+    if (existingProject.length > 0) {
+      // pid exists, use the existing pid
+      pid = existingProject[0].pid;
 
-    // Update project pid
-    await new Promise((resolve, reject) => {
-      const sqlUpdateProject = `UPDATE project_detail 
-                                SET pid = ? 
-                                WHERE id = ?`;
 
-      connection.query(sqlUpdateProject, [pid, projectId], (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
+      const imageCountResult = await new Promise((resolve, reject) => {
+        const countImage = `SELECT COUNT(*) AS pid_count FROM image_detail WHERE pid = ? AND emp_id = ?`;
+        connection.query(countImage, [pid, emp_id], (err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result[0].pid_count);
+          }
+        });
       });
-    });
 
-    // Insert images
+
+      if (imageCountResult >= 5) {
+        // Send message to frontend if the photo limit is exceeded
+        res.send({ message: "Your photo limit has been exceeded. You cannot upload more than 5 photos." });
+        return; // Stop further execution
+      }
+      const remainingImage = 5 - imageCountResult
+
+      if(imageArray.length > remainingImage){
+        res.send({ message: `You are allowed to upload only ${remainingImage} more images.` });
+        return;
+      }
+
+      
+
+    } else {
+      // pid does not exist, insert the new project and generate 
+      
+       const cdate_time = getCurrentDateTime();
+      const sqlInsertProject = `INSERT INTO project_detail 
+                                (emp_id, dist, block, panchayat, village, farmer_name, project_area, activity_type, activity_name, workid, length, breadth, height, entry_date, status) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,'Active')`;
+
+      const projectResult = await new Promise((resolve, reject) => {
+        connection.query(sqlInsertProject, [emp_id, dist, block, panchayat, village, farmer_name, projectArea, activityType, activityName, workid, length, breadth, height, cdate_time], (err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+
+      const projectId = projectResult.insertId;
+      pid = `PR000${projectId}`;
+
+      // Update the project with the generated pid
+      await new Promise((resolve, reject) => {
+        const sqlUpdateProject = `UPDATE project_detail 
+                                  SET pid = ? 
+                                  WHERE id = ?`;
+
+        connection.query(sqlUpdateProject, [pid, projectId], (err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+    }
+
+    // Insert images into image_detail table
     await Promise.all(imageArray.map((image, index) => {
-      const { uri, latitude, longitude, dateTime } = image;
-      const imgUri = `Img${workid}_${index + 1}.jpg`;
 
+      
+  const cdate_time = getCurrentDateTime();
+      const { uri, latitude, longitude, dateTime } = image;
+
+      const parts = uri.split('/');
+      const imageName = parts[parts.length - 1];
+
+      const shortName = imageName.slice(0, 8) + '.jpg'; // Keep the first 8 characters
+console.log(shortName); // Outputs: '2d174adf.jpg'
+    
+      const imgUri = `${workid}_${shortName}`;
+   
+      console.log(imgUri)
       const sqlInsertImage = `INSERT INTO image_detail 
                               (emp_id, pid, url, lat, longitude, description, date_time) 
                               VALUES (?, ?, ?, ?, ?, ?, ?)`;
@@ -387,7 +379,7 @@ app.post("/geo/addProject", async (req, res) => {
       });
     }));
 
-    console.log('Project data inserted and pid updated successfully!');
+    console.log('Project data inserted and images saved successfully!');
     res.status(200).send(workid);
 
   } catch (err) {
@@ -395,6 +387,7 @@ app.post("/geo/addProject", async (req, res) => {
     res.status(500).send('An error occurred while processing the request');
   }
 });
+
 
 
 
@@ -592,8 +585,9 @@ app.get("/geo/completeProjects",(req,res)=>{
   SELECT 
       pd.emp_id, 
       pd.farmer_name,
-      pd.entry_date,
       pd.workid,
+      pd.pid,
+      pd.entry_date,
       mpa.name AS project_name,
       ma.name AS activity_names, 
       mv.name AS village_name, 
@@ -601,12 +595,7 @@ app.get("/geo/completeProjects",(req,res)=>{
       mb.name AS block_name, 
       mp.name AS panchayat_name,
       mat.name AS activity_type_name,
-      emp.name AS employee_name,
-      id.url AS image_url,
-      id.lat AS image_lat,
-      id.longitude AS image_longitude,
-      id.description AS image_description,
-      id.date_time AS image_date_time
+      emp.name AS employee_name 
   FROM project_detail AS pd 
   LEFT JOIN master_activity AS ma ON pd.activity_type = ma.atid 
   LEFT JOIN master_activity_type AS mat ON pd.activity_name = mat.atypeid
@@ -614,11 +603,10 @@ app.get("/geo/completeProjects",(req,res)=>{
   LEFT JOIN master_district AS md ON pd.dist = md.did 
   LEFT JOIN master_block AS mb ON pd.block = mb.block_id 
   LEFT JOIN master_panchayat AS mp ON pd.panchayat = mp.panchayat_id 
-    LEFT JOIN employee AS emp ON pd.emp_id = emp.emp_id
+  LEFT JOIN employee AS emp ON pd.emp_id = emp.emp_id
   JOIN master_project_area AS mpa ON pd.project_area = mpa.project_id
- INNER JOIN image_detail AS id ON pd.pid = id.pid
     WHERE pd.emp_id = ?
-     ORDER BY id.id DESC
+    ORDER BY pd.id DESC;
 `;
 
 connection.query(query, [empId], (error, results) => {
@@ -649,9 +637,25 @@ app.post("/geo/updateStatus", (req, res) => {
   });
 });
 
+
+app.get("/geo/imageDetail",(req,res)=>{
+  const {pid}= req.query
+  const sql= "SELECT * FROM `image_detail` WHERE pid=? ORDER BY id DESC"
+  connection.query(sql, [pid], (error, results) => {
+    if (error) {
+      console.error("Error executing query:", error);
+      res.status(500).json({ error: "Internal server error" });
+      return;
+    }
+    res.json(results);
+  });
+})
+
+
 app.get("/geo",(req,res)=>{
      res.send("hello")
 })
+
 
 
 app.listen(port, () => {
