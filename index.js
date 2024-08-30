@@ -37,6 +37,10 @@ const connection = mysql.createPool({
   user: "pmksybihar_geolocation_user",
   password: "e?S=XJHZI@ij",
   database:"pmksybihar_geolocation_db",
+  // host: "localhost",
+  // user: "root",
+  // password: "",
+  // database:"geolocation",
   timezone: 'Asia/Kolkata'
 
 });
@@ -361,7 +365,7 @@ app.post("/geo/addProject", async (req, res) => {
       const shortName = imageName.slice(0, 8) + '.jpg'; // Keep the first 8 characters
 console.log(shortName); // Outputs: '2d174adf.jpg'
     
-      const imgUri = `${workid}_${shortName}`;
+      const imgUri = `${workid}_${index + 1}.jpg`;
    
       console.log(imgUri)
       const sqlInsertImage = `INSERT INTO image_detail 
@@ -649,6 +653,24 @@ app.get("/geo/imageDetail",(req,res)=>{
     }
     res.json(results);
   });
+})
+
+
+app.get("/geo/deActiveWorkId",(req,res)=>{
+  const {empId}= req.query
+  const sql= `SELECT workid FROM project_detail WHERE emp_id=?`
+
+  connection.query(sql, [empId], (error, results) => {
+    if (error) {
+      console.error("Error executing query:", error);
+      res.status(500).json({ error: "Internal server error" });
+      return;
+    }
+    res.json(results);
+    console.log(results)
+  });
+
+
 })
 
 
